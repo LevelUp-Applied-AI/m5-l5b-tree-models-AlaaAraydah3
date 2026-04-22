@@ -66,6 +66,7 @@ def load_and_split(filepath="data/telecom_churn.csv", random_state=42):
 def build_decision_tree(X_train, y_train, max_depth=5, random_state=42):
     """Train a DecisionTreeClassifier.
 
+    
     Args:
         max_depth: Maximum tree depth (None means unconstrained).
         random_state: Random seed.
@@ -372,11 +373,62 @@ def find_tree_vs_linear_disagreement(rf_model, lr_model, X_test_raw,
         "true_label": int(y_test.iloc[max_idx])
     }
     pass
+from sklearn.metrics import precision_score, recall_score, f1_score
+
+# Chall 1 
+def threshold_sweep_analysis(model, X_test, y_test, output_path="results/threshold_sweep.png"):
+    thresholds = np.arange(0.1, 0.91, 0.05)
+
+    precisions = []
+    recalls = []
+    f1_scores = []
+
+    probs = model.predict_proba(X_test)[:, 1]
+
+    for threshold in thresholds:
+        preds = (probs >= threshold).astype(int)
+
+        precisions.append(precision_score(y_test, preds, zero_division=0))
+        recalls.append(recall_score(y_test, preds, zero_division=0))
+        f1_scores.append(f1_score(y_test, preds, zero_division=0))
+
+    # أفضل threshold للـ F1
+    best_f1_idx = np.argmax(f1_scores)
+    best_f1_threshold = thresholds[best_f1_idx]
+
+    # أول threshold يعطي recall >= 0.80
+    recall_80_threshold = None
+    for t, r in zip(thresholds, recalls):
+        if r >= 0.80:
+            recall_80_threshold = t
+            break
+
+    # Visulaiztion
+    plt.figure(figsize=(8, 6))
+    plt.plot(thresholds, precisions, label="Precision")
+    plt.plot(thresholds, recalls, label="Recall")
+    plt.plot(thresholds, f1_scores, label="F1 Score")
+
+    plt.xlabel("Threshold")
+    plt.ylabel("Score")
+    plt.title("Threshold Sweep Analysis")
+    plt.legend()
+    plt.grid(True)
+
+    plt.savefig(output_path)
+    plt.close()
+
+    return {
+        "best_f1_threshold": best_f1_threshold,
+        "recall_80_threshold": recall_80_threshold
+    }
 
 
 def main():
     """Orchestrate all 7 lab tasks. Run with: python lab_trees.py"""
     os.makedirs("results", exist_ok=True)
+
+    
 
     # Task 1: Load + split
     result = load_and_split()
@@ -433,6 +485,12 @@ def main():
         # Task 5: PR curves + calibration curves
         plot_pr_curves(rf, rf_bal, X_test, y_test, "results/pr_curves.png")
         plot_calibration_curves(rf, rf_bal, X_test, y_test, "results/calibration_curves.png")
+
+        # chall 1: threshould sweep analysis
+        threshold_results = threshold_sweep_analysis(rf_bal, X_test, y_test)
+        print("\n--- Threshold Sweep Analysis ---")
+        print(f"Best threshold for F1: {threshold_results['best_f1_threshold']:.2f}")
+        print(f"Threshold for recall >= 80%: {threshold_results['recall_80_threshold']:.2f}")
 
     # Task 6: Tree-vs-linear disagreement
     scaler = StandardScaler()
